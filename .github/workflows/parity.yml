@@ -1,0 +1,38 @@
+name: piper-parity
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  parity:
+    # ARM-Runner, damit die (arm64-)Engine-Assets genutzt werden können.
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Deterministischer Paritätstest: go-pipers Vorverarbeitung (espeak ->
+      # NFD -> phoneme_id_map) muss exakt Pipers IDs liefern (Goldens aus
+      # `piper --debug`). Braucht nur die eingecheckten Engine-Assets + die
+      # Voice-Config, kein Piper-Binary.
+      - name: Phonem-ID-Parität (deterministisch)
+        run: |
+          CGO_ENABLED=1 go test ./inproc/ -run TestPhonemeIDsGolden -v
+
+      # Optional (nur wenn ein Piper-Binary verfügbar ist): Audio-Parität bei
+      # noise=0 (gleiche Länge + Korrelation > 0.95). Wird sonst übersprungen.
+      - name: Audio-Parität (optional)
+        if: ${{ env.PIPER_BIN != '' }}
+        env:
+          PIPER_BIN: ${{ vars.PIPER_BIN }}
+          PIPER_MODEL: ${{ vars.PIPER_MODEL }}
+          PIPER_ESPEAK: ${{ vars.PIPER_ESPEAK }}
+          PIPER_CONFIG: inproc/testdata/config.json
+        run: |
+          CGO_ENABLED=1 go test ./inproc/ -run TestPiperAudioParity -v

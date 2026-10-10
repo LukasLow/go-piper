@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang=de><head><meta charset=utf-8><title>Blind-A/B — Piper vs go-piper inproc</title>
+<style>
+:root{color-scheme:dark}body{margin:0;padding:34px 40px 80px;background:#0b0b0f;color:#ececf2;
+font:15px/1.55 -apple-system,"SF Pro Text",system-ui,sans-serif;max-width:980px}
+h1{font-size:22px;margin:0 0 4px}p.sub{color:#9a9aa5;margin:0 0 18px}
+.ctrl{position:sticky;top:0;background:#0b0b0f;padding:10px 0;border-bottom:1px solid #1c1c24;margin-bottom:16px}
+button{background:#3a6ea5;color:#fff;border:none;border-radius:9px;padding:9px 16px;font:inherit;font-weight:600;cursor:pointer}
+button.b{background:#22324a;font-weight:400}
+.sentence{border:1px solid #2a2a36;background:#161620;border-radius:12px;padding:10px 14px;margin:14px 0 8px}
+.sentence .lbl{color:#8a8a96;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+.row{display:grid;grid-template-columns:120px 1fr;gap:14px;align-items:center;padding:10px 14px;
+border:1px solid #23232c;border-radius:12px;margin-bottom:8px;background:#14141a}
+.row .pname{font-weight:600}.masked{color:#9aa0b4;font-style:italic}
+audio{width:100%}.choices{display:flex;gap:10px;margin:6px 0 20px}
+.choices button{flex:1;background:#191922;border:1px solid #2b2b38;color:#dcdce8;font-weight:500}
+.choices button:hover{background:#23324a}
+pre{white-space:pre-wrap;background:#101016;border:1px solid #23232c;border-radius:12px;padding:16px;max-width:980px}
+</style></head><body>
+<h1>Blind-A/B — Piper (Referenz) vs. go-piper inproc</h1>
+<p class=p.sub>Pro Text zwei Proben (A/B, zufällig). Wähle <b>A besser</b>, <b>B besser</b> oder <b>Gleichstand</b>.</p>
+<div class=ctrl><button id=go>Start</button> <button class=b id=reveal>alle aufdecken</button> <span id=status class=sub></span></div>
+<div id=app></div>
+<script>
+const DATA = [{'i': 1, 'aspect': 'Umlaute', 'text': 'Schöne Grüße aus München. Die Bäume blühen, und über den Hügeln singen die Vögel.', 'a': 'P', 'af': 'ref_01.wav', 'b': 'I', 'bf': 'our_01.wav'}, {'i': 2, 'aspect': 'Kurz/schnell', 'text': 'Kurz und knapp.', 'a': 'P', 'af': 'ref_02.wav', 'b': 'I', 'bf': 'our_02.wav'}, {'i': 3, 'aspect': 'Langsam', 'text': 'Langsam und deutlich spreche ich diesen längeren Satz, damit man jeden Laut klar hören kann.', 'a': 'P', 'af': 'ref_03.wav', 'b': 'I', 'bf': 'our_03.wav'}, {'i': 4, 'aspect': 'Neutral', 'text': 'Ich bin ein freundlicher Assistent und lese dir deine Antworten vor.', 'a': 'I', 'af': 'our_04.wav', 'b': 'P', 'bf': 'ref_04.wav'}, {'i': 5, 'aspect': 'Rauschen/Klang', 'text': 'Zwischen den Wörtern liegt ein leises, gleichmäßiges Rauschen im Hintergrund.', 'a': 'P', 'af': 'ref_05.wav', 'b': 'I', 'bf': 'our_05.wav'}, {'i': 6, 'aspect': 'Neutral kurz', 'text': 'Guten Tag. Wie geht es dir heute?', 'a': 'I', 'af': 'our_06.wav', 'b': 'P', 'bf': 'ref_06.wav'}, {'i': 7, 'aspect': 'Pangramm', 'text': 'Der schnelle braune Fuchs springt über den faulen Hund.', 'a': 'I', 'af': 'our_07.wav', 'b': 'P', 'bf': 'ref_07.wav'}, {'i': 8, 'aspect': 'Umlaute 2', 'text': 'Über grünen Hügeln schweben weiße Wolken und ein kalter Wind weht.', 'a': 'I', 'af': 'our_08.wav', 'b': 'P', 'bf': 'ref_08.wav'}, {'i': 9, 'aspect': 'Zahlen', 'text': 'Eins, zwei, drei, vier, fünf, sechs, sieben, acht, neun, zehn.', 'a': 'I', 'af': 'our_09.wav', 'b': 'P', 'bf': 'ref_09.wav'}, {'i': 10, 'aspect': 'Neutral lang', 'text': 'Am Dienstag treffen wir uns um vier Uhr am Bahnhof und fahren dann weiter.', 'a': 'P', 'af': 'ref_10.wav', 'b': 'I', 'bf': 'our_10.wav'}];
+const $=(id)=>document.getElementById(id);const app=$("app");let idx=0;
+const letters=["A","B"];
+function el(h){const t=document.createElement("template");t.innerHTML=h.trim();return t.content.firstElementChild;}
+function render(){
+  app.innerHTML="";
+  DATA.forEach((d,di)=>{
+    const sec=el(`<section><div class="sentence"><div class="lbl">${d.i} · ${d.aspect}</div>${d.text}</div>
+      <div class="row"><div class="pname masked">Probe A</div><audio controls preload=none src="ab/${d.af}"></audio></div>
+      <div class="row"><div class="pname masked">Probe B</div><audio controls preload=none src="ab/${d.bf}"></audio></div>
+      <div class="choices"><button data-p="A">A besser</button><button data-p="tie">Gleichstand</button><button data-p="B">B besser</button></div></section>`);
+    sec.querySelectorAll(".choices button").forEach(b=>b.onclick=()=>{
+      DATA[di].choice=b.dataset.p;
+      sec.querySelectorAll(".choices button").forEach(x=>x.style.background="#191922");
+      b.style.background="#2c4a6e";
+      updateStatus();
+    });
+    app.appendChild(sec);
+  });
+}
+function updateStatus(){const done=DATA.filter(d=>d.choice).length;$("status").textContent=done+" / "+DATA.length+" beantwortet";}
+$("go").onclick=render;
+$("reveal").onclick=()=>{
+  document.querySelectorAll(".pname").forEach((n,i)=>{
+    const d=DATA[Math.floor(i/2)];
+    const isA=(i%2===0);
+    const who=isA?d.a:d.b;
+    n.classList.remove("masked");n.textContent=(isA?"Probe A":"Probe B")+" — "+(who==="P"?"Piper (Ref)":"go-piper inproc");
+  });
+};
+render();
+</script></body></html>

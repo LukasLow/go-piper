@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math"
 	"os"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // Config ist der Piper-`.onnx.json`-Begleitfile (Ausschnitt).
@@ -35,20 +37,35 @@ func LoadConfig(path string) (*Config, error) {
 	return &c, nil
 }
 
-// PhonemesToIDs bildet Pipers Sequenz: BOS, dann je Phonem (IDs + PAD), dann EOS.
+// PhonemesToIDs bildet Pipers exakte Sequenz (phoneme_ids.cpp):
+//
+//	BOS, PAD, (Phonem, PAD)*, EOS
+//
+// Phoneme und Map-Schlüssel werden vorher NFD-normalisiert (Piper
+// `una::norm::to_nfd_utf8`), damit z. B. "ç" -> "c" + Combining-Mark passt.
 func (c *Config) PhonemesToIDs(phonemes string) []int64 {
-	ids := make([]int64, 0, len(phonemes)*2+2)
-	ids = append(ids, c.PhonemeIDMap["^"]...) // BOS
-	pad := c.PhonemeIDMap["_"]
+	m := make(map[string][]int64, len(c.PhonemeIDMap))
+	for k, v := range c.PhonemeIDMap {
+		nk := norm.NFD.String(k)
+		if _, ok := m[nk]; !ok {
+			m[nk] = v
+		}
+	}
+	phonemes = norm.NFD.String(phonemes)
+
+	ids := make([]int64, 0, len(phonemes)*2+3)
+	ids = append(ids, m["^"]...) // BOS
+	ids = append(ids, m["_"]...) // PAD nach BOS
+	pad := m["_"]
 	for _, r := range phonemes {
-		v, ok := c.PhonemeIDMap[string(r)]
+		v, ok := m[string(r)]
 		if !ok {
 			continue
 		}
 		ids = append(ids, v...)
 		ids = append(ids, pad...)
 	}
-	ids = append(ids, c.PhonemeIDMap["$"]...) // EOS
+	ids = append(ids, m["$"]...) // EOS
 	return ids
 }
 

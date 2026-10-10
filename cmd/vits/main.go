@@ -1,7 +1,8 @@
-// Command vits testet die komplette In-Process-Kette:
-// espeak-ng (Phoneme) -> phoneme_id_map -> ONNX Runtime (VITS) -> WAV.
+// Command vits testet die komplette eingebettete In-Process-Kette:
+// espeak-ng -> phoneme_id_map -> ONNX Runtime (VITS) -> WAV.
+// Kein externes Binary, keine Systeminstallation.
 //
-//	CGO_ENABLED=1 go run ./cmd/vits <model.onnx> <model.onnx.json> <espeak-parent> "<text>" out.wav
+//	CGO_ENABLED=1 go run ./cmd/vits <model.onnx> <config.json> <out.wav> "TEXT" [voice]
 package main
 
 import (
@@ -12,42 +13,31 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 6 {
-		fmt.Fprintln(os.Stderr, `Aufruf: go run ./cmd/vits <model.onnx> <config.json> <espeak-parent> "TEXT" <out.wav>`)
+	if len(os.Args) < 5 {
+		fmt.Fprintln(os.Stderr, `Aufruf: go run ./cmd/vits <model.onnx> <config.json> <out.wav> "TEXT" [voice]`)
 		os.Exit(2)
 	}
-	modelPath, cfgPath, espeakParent, text, out := os.Args[1], os.Args[2], os.Args[3], os.Args[4], os.Args[5]
+	model, cfg, out, text := os.Args[1], os.Args[2], os.Args[3], os.Args[4]
+	voice := "de"
+	if len(os.Args) > 5 {
+		voice = os.Args[5]
+	}
 
-	cfg, err := inproc.LoadConfig(cfgPath)
+	// Debug: Phonem-Strings pro Satz (Vergleich mit `piper --debug`).
+	if sents, err := inproc.SentencesFor(text, voice); err == nil {
+		for i, s := range sents {
+			fmt.Printf("[sentence %d] %q\n", i+1, s)
+		}
+	}
+
+	wav, err := inproc.Synthesize(text, voice, model, cfg)
 	if err != nil {
-		fatal(err)
+		fmt.Fprintln(os.Stderr, "Fehler:", err)
+		os.Exit(1)
 	}
-	phon, err := inproc.Phonemize(text, "de", espeakParent)
-	if err != nil {
-		fatal(err)
+	if err := os.WriteFile(out, wav, 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, "Fehler:", err)
+		os.Exit(1)
 	}
-	ids := cfg.PhonemesToIDs(phon)
-	fmt.Printf("phoneme: %s\nids: %d\n", phon, len(ids))
-
-	m, err := inproc.OpenModel(modelPath)
-	if err != nil {
-		fatal(err)
-	}
-	defer m.Close()
-
-	samples, err := m.Infer(ids, [3]float32{0.667, 1.0, 0.8})
-	if err != nil {
-		fatal(err)
-	}
-	fmt.Printf("samples: %d (%.2fs)\n", len(samples), float64(len(samples))/float64(cfg.Audio.SampleRate))
-
-	if err := os.WriteFile(out, inproc.FloatToWAV(samples, cfg.Audio.SampleRate), 0o644); err != nil {
-		fatal(err)
-	}
-	fmt.Println("geschrieben:", out)
-}
-
-func fatal(err error) {
-	fmt.Fprintln(os.Stderr, "Fehler:", err)
-	os.Exit(1)
+	fmt.Printf("geschrieben: %s (%d Bytes)\n", out, len(wav))
 }
