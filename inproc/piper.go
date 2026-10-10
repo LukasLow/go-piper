@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"math"
 	"os"
-
-	"golang.org/x/text/unicode/norm"
 )
 
 // Config ist der Piper-`.onnx.json`-Begleitfile (Ausschnitt).
@@ -43,15 +41,17 @@ func LoadConfig(path string) (*Config, error) {
 //
 // Phoneme und Map-Schlüssel werden vorher NFD-normalisiert (Piper
 // `una::norm::to_nfd_utf8`), damit z. B. "ç" -> "c" + Combining-Mark passt.
+// nfd() liefert exakt dasselbe wie golang.org/x/text (siehe nfd_tables.go),
+// aber ohne die Abhängigkeit.
 func (c *Config) PhonemesToIDs(phonemes string) []int64 {
 	m := make(map[string][]int64, len(c.PhonemeIDMap))
 	for k, v := range c.PhonemeIDMap {
-		nk := norm.NFD.String(k)
+		nk := nfd(k)
 		if _, ok := m[nk]; !ok {
 			m[nk] = v
 		}
 	}
-	phonemes = norm.NFD.String(phonemes)
+	phonemes = nfd(phonemes)
 
 	ids := make([]int64, 0, len(phonemes)*2+3)
 	ids = append(ids, m["^"]...) // BOS

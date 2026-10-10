@@ -69,6 +69,13 @@ drin. Beispielgrößen:
 
 ## Technische Details
 
+- **Keine Modul-Abhängigkeiten**: go-piper importiert ausschließlich die
+  Standardbibliothek (`go.mod` hat kein `require`). Die Piper-Vorverarbeitung
+  braucht Unicode-NFD; statt `golang.org/x/text` liegt dafür eine eingecheckte,
+  generierte Tabelle bei (`inproc/nfd_tables.go`, erzeugt mit
+  `python3 scripts/gennfd.py`, plus `inproc/nfd.go`). Sie stimmt im
+  Piper-Zeichenbereich (Latein/IPA/Combining, U+0000–U+2FFF) exakt mit
+  `x/text` überein.
 - **Symlinks**: `go:embed` bettet keine Symlinks ein → `symlinks.txt`-Manifest,
   beim Entpacken nachgebaut.
 - **Cache**: entpackt nach `$XDG_CACHE_HOME/go-piper/<tag>/` (idempotent).
