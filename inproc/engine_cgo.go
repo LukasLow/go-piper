@@ -135,6 +135,10 @@ var (
 // loadLibs lädt espeak + onnxruntime aus dir (einmalig).
 func loadLibs(dir string) error {
 	loadOnce.Do(func() {
+		// macOS: kaputte/fehlende Signaturen auf den entpackten dylibs reparieren,
+		// bevor dlopen sie lädt — sonst killt das System den Prozess sofort.
+		// Auf anderen Plattformen ein No-op.
+		_ = ensureSigned(dir)
 		es := C.CString(dir + "/lib/" + espeakLib)
 		defer C.free(unsafe.Pointer(es))
 		if rc := C.lux_espeak_load(es); rc != 0 {

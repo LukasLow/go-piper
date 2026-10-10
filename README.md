@@ -9,7 +9,7 @@ Zwei Pakete:
 | Paket | Was | Status |
 |-------|-----|--------|
 | `piper` | Piper ausführen über die **eingebettete** Runtime (Kindprozess, cross-platform, kein cgo) | ✅ linux/arm64 |
-| `inproc` | **In-Process** per **cgo**: espeak-ng + ONNX Runtime direkt gebunden (kein Piper-Binary, **kein `piper_phonemize`**) | ✅ linux/arm64 · 🟡 darwin/arm64 (Quelle fertig, dylibs-Relokation offen) |
+| `inproc` | **In-Process** per **cgo**: espeak-ng + ONNX Runtime direkt gebunden (kein Piper-Binary, **kein `piper_phonemize`**) | ✅ linux/arm64 · ✅ darwin/arm64 |
 
 ## `piper` — Synthese (eingebettet, cross-platform)
 
@@ -74,6 +74,12 @@ drin. Beispielgrößen:
 - **Cache**: entpackt nach `$XDG_CACHE_HOME/go-piper/<tag>/` (idempotent).
 - **cgo/inproc**: linkt gegen `inproc/libs/<tag>/` (rpath gesetzt); Datenpfad
   zeigt auf das Verzeichnis, das `espeak-ng-data/` enthält.
+- **macOS-Signierung**: Auf Apple Silicon killt das System den ganzen Prozess
+  (`SIGKILL "Code Signature Invalid"`), sobald eine per `dlopen` geladene Lib
+  keine **gültige** Signatur hat. Deshalb signiert `scripts/relocate_macos.py`
+  die relokierten dylibs nach dem Byte-Patch ad-hoc neu, und `inproc` prüft/
+  repariert die entpackten Signaturen zusätzlich vor jedem `dlopen`
+  (`ensureSigned`, nur darwin; sonst No-op).
 
 ## Status
 
@@ -83,8 +89,9 @@ drin. Beispielgrößen:
   ```
   CGO_ENABLED=1 go run ./cmd/vits <model.onnx> <model.onnx.json> <espeak-parent> "Text" out.wav
   ```
-- 🟡 `inproc`: darwin/arm64 — Quell-Bindings liegen; es fehlt noch die saubere
-  Relokation der Homebrew-espeak-dylib (`libpcaudio`, `@@HOMEBREW_PREFIX@@`).
+- ✅ `inproc`: darwin/arm64 — komplette In-Process-Kette inkl. Relokation der
+  Homebrew-espeak-dylib (`libpcaudio`, `@@HOMEBREW_PREFIX@@`) und Ad-hoc-Re-Sign
+  nach dem Byte-Patch.
 - ⬜ weitere Plattformen
 
 ## Lizenz
