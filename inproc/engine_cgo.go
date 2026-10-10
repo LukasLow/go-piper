@@ -155,6 +155,17 @@ func loadLibs(dir string) error {
 	return loadErr
 }
 
+// espeak is initialised exactly once and its data path is kept alive:
+// espeak_Initialize stores the path pointer (path_home) and reads it later, so
+// freeing that C string caused a use-after-free (garbage phoneme programs, then
+// a SIGSEGV). Re-initialising on every call additionally corrupted espeak's
+// internal state — a streamed answer (one call per sentence) hit it fast.
+var (
+	espeakInitOnce sync.Once
+	espeakInitErr  error
+	espeakDataDir  *C.char // kept alive for the whole process; never freed
+)
+
 // Phonemize liefert IPA-Phoneme. dataParent ist das Verzeichnis, das
 // `espeak-ng-data/` enthält.
 func Phonemize(text, voice, dataParent string) (string, error) {
@@ -165,10 +176,14 @@ func Phonemize(text, voice, dataParent string) (string, error) {
 	if err := loadLibs(root); err != nil {
 		return "", err
 	}
-	cd := C.CString(dataParent)
-	defer C.free(unsafe.Pointer(cd))
-	if C.lux_espeak_init(cd) < 0 {
-		return "", fmt.Errorf("inproc: espeak_Initialize(%q) fehlgeschlagen", dataParent)
+	espeakInitOnce.Do(func() {
+		espeakDataDir = C.CString(dataParent) // NOT freed: espeak keeps this pointer
+		if C.lux_espeak_init(espeakDataDir) < 0 {
+			espeakInitErr = fmt.Errorf("inproc: espeak_Initialize(%q) fehlgeschlagen", dataParent)
+		}
+	})
+	if espeakInitErr != nil {
+		return "", espeakInitErr
 	}
 	cv := C.CString(voice)
 	defer C.free(unsafe.Pointer(cv))
