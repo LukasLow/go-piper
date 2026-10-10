@@ -95,8 +95,8 @@ def main():
         rows.append({"i": i, "aspect": aspect, "text": text, "a": a, "b": b})
         print(f"  {i:02d} [{aspect}] ref={len(ref)/sr:.1f}s inproc={len(our)/sr:.1f}s")
 
-    write_html(rows)
-    print("fertig:", os.path.join(OUT, "..", "ab.html"))
+    # ab.html wird NICHT hier erzeugt (sonst Überschreiben der Turnier-Seite).
+    print("Audio fertig. ab.html bleibt unverändert (Turnier-Flow).")
 
 
 def write_html(rows):
