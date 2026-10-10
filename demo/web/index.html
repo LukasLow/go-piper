@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>go-piper Streaming-Demo</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; padding:34px 40px; background:#0b0b0f; color:#ececf2;
+         font:15px/1.55 -apple-system,"SF Pro Text",system-ui,sans-serif; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  p.sub { color:#9a9aa5; margin:0 0 18px; }
+  button { background:#3a6ea5; color:#fff; border:none; border-radius:10px; padding:12px 22px;
+           font:inherit; font-weight:600; cursor:pointer; }
+  button:hover { background:#4479b2; }
+  .grid { display:grid; grid-template-columns:1fr 320px; gap:22px; max-width:1000px; margin-top:20px; }
+  #words { min-height:200px; border:1px solid #23232c; background:#14141a; border-radius:12px;
+           padding:16px; line-height:1.9; }
+  #words .w { display:inline-block; margin:0 4px 4px 0; padding:1px 6px; background:#1d2330;
+              border-radius:6px; }
+  .panel { border:1px solid #23232c; background:#14141a; border-radius:12px; padding:14px 16px; }
+  .panel h2 { font-size:14px; margin:0 0 10px; color:#c9c9d6; }
+  .kv { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #1e1e26; font-size:14px; }
+  .kv b { font-variant-numeric:tabular-nums; }
+  .hl { color:#8fe08f; }
+  .muted { color:#8a8a96; font-size:12.5px; }
+</style>
+</head>
+<body>
+<h1>go-piper · Streaming-Demo</h1>
+<p class="sub">Text streamt wie eine LLM-Antwort — Piper synthetisiert parallel. Miss: erstes/letztes Wort (Text vs. Audio).</p>
+<button id="go">„Hallo“ senden</button>
+<span class="muted" id="status"></span>
+
+<div class="grid">
+  <div id="words"></div>
+  <div class="panel">
+    <h2>Zeitmessung</h2>
+    <div class="kv"><span>Text-Wörter</span><b id="nwords">0</b></div>
+    <div class="kv"><span>erstes Textwort</span><b id="ft">–</b></div>
+    <div class="kv"><span class="hl">erstes Audio</span><b class="hl" id="fa">–</b></div>
+    <div class="kv"><span>letztes Textwort</span><b id="lt">–</b></div>
+    <div class="kv"><span>letztes Audio</span><b id="la">–</b></div>
+    <div class="kv"><span>Audio-Häppchen</span><b id="nchunks">0</b></div>
+  </div>
+</div>
+
+<script>
+const $ = (id)=>document.getElementById(id);
+const words = $("words");
+let queue = [], playing = false, nchunks = 0;
+
+function playNext(){
+  if (playing || queue.length === 0) return;
+  playing = true;
+  const url = queue.shift();
+  const a = new Audio(url);
+  a.onended = ()=>{ playing=false; URL.revokeObjectURL(url); playNext(); };
+  a.play().catch(()=>{ playing=false; });
+}
+function enqueueWav(b64){
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([bytes], {type:"audio/wav"}));
+  nchunks++; $("nchunks").textContent = nchunks;
+  queue.push(url); playNext();
+}
+
+$("go").onclick = ()=>{
+  words.innerHTML=""; nchunks=0; $("nchunks").textContent="0";
+  for (const id of ["ft","fa","lt","la"]) $(id).textContent="–";
+  $("nwords").textContent="0";
+  $("status").textContent = "läuft…";
+
+  const es = new EventSource("/stream");
+  let count=0;
+
+  es.addEventListener("firstText", e=>{ $("ft").textContent = JSON.parse(e.data).ms + " ms"; });
+  es.addEventListener("word", e=>{
+    const d = JSON.parse(e.data);
+    const s = document.createElement("span"); s.className="w"; s.textContent=d.w;
+    words.appendChild(s); words.scrollTop = words.scrollHeight;
+    $("nwords").textContent = ++count;
+  });
+  es.addEventListener("audio", e=>{ enqueueWav(JSON.parse(e.data).wav); });
+  es.addEventListener("lastText", e=>{ $("lt").textContent = JSON.parse(e.data).ms + " ms"; });
+  es.addEventListener("done", e=>{
+    const d = JSON.parse(e.data);
+    $("fa").textContent = d.firstAudioMs + " ms";
+    $("la").textContent = d.lastAudioMs + " ms";
+    $("status").textContent = "fertig.";
+    es.close();
+  });
+  es.onerror = ()=>{ $("status").textContent="Stream beendet."; es.close(); };
+};
+</script>
+</body>
+</html>

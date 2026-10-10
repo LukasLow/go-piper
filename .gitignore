@@ -1,0 +1,6 @@
+# Eingebettete native Assets werden NICHT ins Repo committet (viel zu groß).
+# Stattdessen pro Plattform per Skript holen (oder CI), dann bauen.
+embed/
+inproc/libs/
+out.wav
+ph.wav

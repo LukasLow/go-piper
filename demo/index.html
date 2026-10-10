@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>go-piper — Demo-Ergebnisse</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; padding:34px 40px; background:#0b0b0f; color:#ececf2;
+         font:15px/1.55 -apple-system,"SF Pro Text",system-ui,sans-serif; max-width:900px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  h2 { font-size:16px; margin:26px 0 8px; }
+  p.sub { color:#9a9aa5; margin:0 0 8px; }
+  .card { border:1px solid #23232c; background:#14141a; border-radius:13px; padding:16px 18px; margin:12px 0; }
+  audio { width:100%; margin-top:8px; }
+  table { width:100%; border-collapse:collapse; margin-top:8px; }
+  td { padding:6px 4px; border-bottom:1px solid #1e1e26; }
+  td:last-child { text-align:right; font-variant-numeric:tabular-nums; }
+  .hl { color:#8fe08f; font-weight:700; }
+  code { background:#101016; padding:2px 6px; border-radius:6px; }
+</style>
+</head>
+<body>
+<h1>go-piper · Demo-Ergebnisse</h1>
+<p class="sub">Zwei Test-Audios + die gemessene Streaming-Bilanz (Text-Stream vs. Audio).</p>
+
+<h2>1 · ~1-Minuten-Audio</h2>
+<div class="card">
+  <div>Ein einzelner, langer Text (~66 s Audio), in einem Rutsch synthetisiert.</div>
+  <audio controls src="out/long1min.wav"></audio>
+</div>
+
+<h2>2 · Streaming-Demo</h2>
+<div class="card">
+  <div>Text gestreamt (simuliertes LLM, ~55 ms/Wort); Piper synthetisiert jeden Satz,
+       sobald er fertig ist — <b>parallel</b> zum Stream.</div>
+  <audio controls src="out/stream.wav"></audio>
+  <table>
+    <tr><td>erstes Textwort</td><td>0 ms</td></tr>
+    <tr><td class="hl">erstes Audio</td><td class="hl">636 ms</td></tr>
+    <tr><td>letztes Textwort</td><td>8206 ms</td></tr>
+    <tr><td>letztes Audio</td><td>13853 ms</td></tr>
+    <tr><td>Audio gesamt</td><td>46,8 s</td></tr>
+    <tr><td>RTF</td><td>0,30</td></tr>
+  </table>
+</div>
+
+<p class="sub">Interaktive Live-Version: <code>go run ./demo/server -model /pfad/zur.onnx</code> → <code>http://localhost:8080</code>.</p>
+</body>
+</html>

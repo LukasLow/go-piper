@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>go-piper · Streaming-Simulation</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:34px 40px 60px; background:#0b0b0f; color:#ececf2;
+         font:15px/1.55 -apple-system,"SF Pro Text",system-ui,sans-serif; max-width:1000px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  p.sub { color:#9a9aa5; margin:0 0 18px; }
+  button { background:#3a6ea5; color:#fff; border:none; border-radius:10px; padding:12px 22px;
+           font:inherit; font-weight:600; cursor:pointer; }
+  button:hover { background:#4479b2; }
+  button:disabled { opacity:.5; cursor:default; }
+  .muted { color:#8a8a96; font-size:12.5px; margin-left:10px; }
+  .grid { display:grid; grid-template-columns:1fr 320px; gap:22px; margin-top:20px; }
+  #words { min-height:220px; border:1px solid #23232c; background:#14141a; border-radius:12px;
+           padding:16px; line-height:2; }
+  #words .w { display:inline-block; margin:0 4px 4px 0; padding:1px 6px; background:#1d2330; border-radius:6px;
+              animation:pop .18s ease; }
+  @keyframes pop { from { opacity:0; transform:translateY(3px);} to {opacity:1;} }
+  .panel { border:1px solid #23232c; background:#14141a; border-radius:12px; padding:14px 16px; align-self:start; }
+  .panel h2 { font-size:14px; margin:0 0 10px; color:#c9c9d6; }
+  .kv { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #1e1e26; font-size:14px; }
+  .kv b { font-variant-numeric:tabular-nums; }
+  .hl { color:#8fe08f; }
+  .tl { margin-top:22px; max-width:1000px; }
+  .lane { position:relative; height:26px; background:#14141a; border:1px solid #23232c; border-radius:8px; margin:8px 0; overflow:hidden; }
+  .lane .fill { position:absolute; left:0; top:0; bottom:0; width:0; background:linear-gradient(90deg,#2c4a6e,#3a6ea5); }
+  .lane .fill.audio { background:linear-gradient(90deg,#2f5a37,#4e8a5c); }
+  .lane .mark { position:absolute; top:-1px; bottom:-1px; width:2px; background:#fff; }
+  .lane .lbl { position:absolute; left:8px; top:4px; font-size:11px; color:#cfd6e6; }
+  .legend { color:#8a8a96; font-size:12.5px; }
+  audio { display:none; }
+</style>
+</head>
+<body>
+<h1>go-piper · Streaming-Simulation</h1>
+<p class="sub">Text streamt wie eine LLM-Antwort (55 ms/Wort); das echte Piper-Audio startet nach der gemessenen Verzögerung. Kein Server nötig.</p>
+
+<button id="go">Streaming starten</button>
+<span class="muted" id="status">bereit</span>
+<audio id="audio" src="out/stream.wav" preload="auto"></audio>
+
+<div class="grid">
+  <div id="words"></div>
+  <div class="panel">
+    <h2>Zeitmessung</h2>
+    <div class="kv"><span>Text-Wörter</span><b id="nwords">0</b></div>
+    <div class="kv"><span>erstes Textwort</span><b id="ft">–</b></div>
+    <div class="kv"><span class="hl">erstes Audio</span><b class="hl" id="fa">–</b></div>
+    <div class="kv"><span>letztes Textwort</span><b id="lt">–</b></div>
+    <div class="kv"><span>Audio zu Ende</span><b id="la">–</b></div>
+  </div>
+</div>
+
+<div class="tl">
+  <div class="lane"><div class="fill" id="fillText"></div><div class="lbl">Text-Stream</div><div class="mark" id="mText" style="display:none"></div></div>
+  <div class="lane"><div class="fill audio" id="fillAudio"></div><div class="lbl">Audio</div><div class="mark" id="mAudio" style="display:none"></div></div>
+  <div class="legend">Die weißen Marken zeigen „erstes Audio" (Text/Audio-Skala = Echtzeit).</div>
+</div>
+
+<script>
+// Derselbe Text wie in demo/streamdemo (Reihenfolge/Satzenden identisch).
+const TEXT = "Guten Tag. Ich bin ein freundlicher Assistent. Heute " +
+  "möchte ich dir zeigen, wie flüssig Sprache aus einem Text entstehen kann, " +
+  "während der Text noch geschrieben wird. Stell dir vor, ein Sprachmodell " +
+  "schreibt eine Antwort Wort für Wort, und genau währenddessen beginnt die " +
+  "Stimme schon zu sprechen. Das nennt man Streaming, und es fühlt sich viel " +
+  "lebendiger an als Warten. In diesem Beispiel liest du den Text mit und hörst " +
+  "gleichzeitig zu. Am Anfang ist alles noch still, doch sobald der erste Satz " +
+  "vollständig ist, erklingt die erste Stimme. Danach läuft beides Seite an Seite " +
+  "weiter, Satz für Satz, bis die Antwort zu Ende ist. So siehst du genau, wie " +
+  "kurz die Verzögerung bis zum ersten Ton wirklich ist. Ich hoffe, das klingt " +
+  "angenehm und natürlich, und vielleicht hilft es dir, deine eigene Anwendung " +
+  "noch besser zu machen. Vielen Dank fürs Zuhören, und bis zum nächsten Mal.";
+
+const LLM_MS = 55;        // simulierte LLM-Geschwindigkeit (ms pro Wort)
+const FIRST_AUDIO_MS = 636; // gemessene Verzögerung bis zum ersten Ton
+
+const $ = (id) => document.getElementById(id);
+const words = $("words"), audio = $("audio");
+const WORDS = TEXT.split(/\s+/).filter(Boolean);
+let timers = [], raf = 0, playing = false;
+
+function reset() {
+  timers.forEach(clearTimeout); timers = [];
+  cancelAnimationFrame(raf);
+  words.innerHTML = "";
+  for (const id of ["ft","fa","lt","la"]) $(id).textContent = "–";
+  $("nwords").textContent = "0";
+  ["mText","mAudio"].forEach(id => $(id).style.display = "none");
+  $("fillText").style.width = "0%"; $("fillAudio").style.width = "0%";
+  audio.pause(); audio.currentTime = 0;
+}
+
+function start() {
+  reset();
+  $("go").disabled = true; $("status").textContent = "läuft…";
+  const t0 = performance.now();
+
+  WORDS.forEach((w, i) => {
+    timers.push(setTimeout(() => {
+      const el = document.createElement("span");
+      el.className = "w"; el.textContent = w;
+      words.appendChild(el); words.scrollTop = words.scrollHeight;
+      $("nwords").textContent = i + 1;
+      if (i === 0) $("ft").textContent = Math.round(performance.now() - t0) + " ms";
+      if (i === WORDS.length - 1) {
+        $("lt").textContent = Math.round(performance.now() - t0) + " ms";
+        $("mText").style.display = "block";
+      }
+    }, i * LLM_MS));
+  });
+
+  // Audio startet nach gemessener Verzögerung.
+  timers.push(setTimeout(() => {
+    const ms = Math.round(performance.now() - t0);
+    $("fa").textContent = ms + " ms";
+    $("mAudio").style.display = "block";
+    audio.play().catch(() => { $("status").textContent = "Audio fehlt (out/stream.wav)"; });
+  }, FIRST_AUDIO_MS));
+
+  audio.onended = () => {
+    $("la").textContent = Math.round(performance.now() - t0) + " ms";
+    $("status").textContent = "fertig.";
+    $("go").disabled = false;
+  };
+
+  // Timeline-Fortschritt (Echtzeit-Balken).
+  const dur = (audio.duration && isFinite(audio.duration)) ? audio.duration * 1000 : 47000;
+  const total = Math.max(dur + FIRST_AUDIO_MS, WORDS.length * LLM_MS);
+  const step = () => {
+    const now = performance.now() - t0;
+    $("fillText").style.width = Math.min(100, (now / total) * 100) + "%";
+    const a = Math.max(0, now - FIRST_AUDIO_MS);
+    $("fillAudio").style.width = Math.min(100, (a / total) * 100) + "%";
+    raf = requestAnimationFrame(step);
+  };
+  raf = requestAnimationFrame(step);
+}
+
+$("go").onclick = start;
+</script>
+</body>
+</html>
