@@ -1,4 +1,4 @@
-//go:build !(linux && arm64 && cgo)
+//go:build !(cgo && arm64 && (linux || darwin))
 
 package inproc
 

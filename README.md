@@ -9,7 +9,7 @@ Zwei Pakete:
 | Paket | Was | Status |
 |-------|-----|--------|
 | `piper` | Piper ausführen über die **eingebettete** Runtime (Kindprozess, cross-platform, kein cgo) | ✅ linux/arm64 |
-| `inproc` | **In-Process**-Bausteine per **cgo** (espeak-ng direkt gebunden) | 🟡 Phonemizer ✅, Inferenz folgt |
+| `inproc` | **In-Process** per **cgo**: espeak-ng + ONNX Runtime direkt gebunden (kein Piper-Binary, **kein `piper_phonemize`**) | ✅ linux/arm64 · 🟡 darwin/arm64 (Quelle fertig, dylibs-Relokation offen) |
 
 ## `piper` — Synthese (eingebettet, cross-platform)
 
@@ -78,8 +78,13 @@ drin. Beispielgrößen:
 ## Status
 
 - ✅ `piper`: linux/arm64 (embed + exec)
-- ✅ `inproc`: Phonemizer linux/arm64 (cgo)
-- ⬜ `inproc`: VITS-Inferenz (ONNX Runtime C-API) — nächster Schritt
+- ✅ `inproc`: **komplette In-Process-Kette** linux/arm64 — `cmd/vits`:
+  espeak-ng (Phoneme) → `phoneme_id_map` → ONNX Runtime (VITS) → WAV.
+  ```
+  CGO_ENABLED=1 go run ./cmd/vits <model.onnx> <model.onnx.json> <espeak-parent> "Text" out.wav
+  ```
+- 🟡 `inproc`: darwin/arm64 — Quell-Bindings liegen; es fehlt noch die saubere
+  Relokation der Homebrew-espeak-dylib (`libpcaudio`, `@@HOMEBREW_PREFIX@@`).
 - ⬜ weitere Plattformen
 
 ## Lizenz
